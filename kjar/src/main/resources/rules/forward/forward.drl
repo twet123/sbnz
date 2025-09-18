@@ -1,0 +1,47 @@
+package rules.forward;
+
+import com.ftn.sbnz.model.models.Process;
+import com.ftn.sbnz.model.enums.ProcessStatus;
+import com.ftn.sbnz.model.models.SystemState
+import com.ftn.sbnz.model.models.CpuCore
+import com.ftn.sbnz.model.enums.CpuCoreStatus
+
+rule "Make process ready"
+    when
+        $p: Process(status == ProcessStatus.NEW)
+        $ss: SystemState(availableMemory >= $p.memoryRequirement)
+    then
+        modify($p){ setStatus(ProcessStatus.READY), setLastStatusChange(System.currentTimeMillis()) }
+        modify($ss){ setAvailableMemory($ss.getAvailableMemory() - $p.getMemoryRequirement()) }
+end
+
+rule "Schedule process with the highest priority"
+    when
+        $maxPriority: Number() from accumulate(
+            Process(status == ProcessStatus.READY, $priority: priority),
+            max($priority)
+        )
+        $p: Process(status == ProcessStatus.READY, priority == $maxPriority)
+        $core: CpuCore(status == CpuCoreStatus.IDLE, stateEnabled == true)
+    then
+        modify($p) { setStatus(ProcessStatus.RUNNING), setLastStatusChange(System.currentTimeMillis()) }
+        modify($core) { setCurrentProcessId($p.getId()), setLastStatusChange(System.currentTimeMillis()), setStatus(CpuCoreStatus.BUSY) }
+end
+
+rule "Execute process"
+    when
+        $p: Process(status == ProcessStatus.RUNNING, currentInstruction < totalInstructions)
+    then
+        modify($p) { setCurrentInstruction($p.getCurrentInstruction() + 1) }
+end
+
+rule "Finish executing the process"
+    when
+        $p: Process(status == ProcessStatus.RUNNING, currentInstruction == totalInstructions)
+        $core: CpuCore(currentProcessId == $p.id)
+        $ss: SystemState()
+    then
+        modify($p) { setStatus(ProcessStatus.EXIT), setLastStatusChange(System.currentTimeMillis()) }
+        modify($core) { setCurrentProcessId(null), setStatus(CpuCoreStatus.IDLE), setLastStatusChange(System.currentTimeMillis()) }
+        modify($ss) { setAvailableMemory($ss.getAvailableMemory() + $p.getMemoryRequirement()) }
+end
