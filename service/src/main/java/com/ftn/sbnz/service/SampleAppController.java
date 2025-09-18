@@ -8,7 +8,7 @@ import org.springframework.web.bind.annotation.*;
 
 @RestController
 public class SampleAppController {
-    private static Logger log = LoggerFactory.getLogger(SampleAppController.class);
+    private static final Logger log = LoggerFactory.getLogger(SampleAppController.class);
 
     private final SampleAppService sampleService;
 
