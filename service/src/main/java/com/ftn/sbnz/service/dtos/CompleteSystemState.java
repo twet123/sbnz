@@ -1,6 +1,7 @@
 package com.ftn.sbnz.service.dtos;
 
 import com.ftn.sbnz.model.models.CpuCore;
+import com.ftn.sbnz.model.models.Process;
 import com.ftn.sbnz.model.models.SystemState;
 import lombok.Data;
 
