@@ -9,4 +9,5 @@ public class SystemState {
 
     private int availableMemory;
     private int totalMemory;
+    private boolean cpuEnabled;
 }
