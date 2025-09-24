@@ -1,10 +1,4 @@
 <kmodule xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://jboss.org/kie/6.0.0/kmodule">
-    <kbase name="bwBase" packages="rules.backward">
-        <ksession name="bwKsession"/>
-    </kbase>
-    <kbase name="cepKbase" eventProcessingMode="stream" packages="rules.cep">
-        <ksession name="cepKsession" clockType="pseudo"/>
-    </kbase>
     <kbase name="forwardBase" eventProcessingMode="stream" packages="rules.forward">
         <ksession name="forwardSession" clockType="pseudo"/>
     </kbase>
