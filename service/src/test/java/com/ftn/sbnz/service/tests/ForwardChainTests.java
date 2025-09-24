@@ -7,12 +7,25 @@ import com.ftn.sbnz.model.events.CpuTemperatureEvent;
 import com.ftn.sbnz.model.models.CpuCore;
 import com.ftn.sbnz.model.models.Process;
 import com.ftn.sbnz.model.models.SystemState;
+import org.drools.decisiontable.ExternalSpreadsheetCompiler;
 import org.junit.Test;
+import org.kie.api.KieBase;
+import org.kie.api.KieBaseConfiguration;
 import org.kie.api.KieServices;
-import org.kie.api.runtime.KieContainer;
+import org.kie.api.conf.EventProcessingOption;
+import org.kie.api.event.rule.DebugAgendaEventListener;
+import org.kie.api.io.Resource;
+import org.kie.api.io.ResourceType;
 import org.kie.api.runtime.KieSession;
+import org.kie.api.runtime.KieSessionConfiguration;
+import org.kie.api.runtime.conf.ClockTypeOption;
+import org.kie.api.time.SessionPseudoClock;
+import org.kie.internal.io.ResourceFactory;
+import org.kie.internal.utils.KieHelper;
 
+import java.io.InputStream;
 import java.util.Collections;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -130,33 +143,113 @@ public class ForwardChainTests {
     @Test
     public void testCpuTemperatureEvents() {
         KieSession kieSession = getSession();
+        SessionPseudoClock clock = kieSession.getSessionClock();
 
-        Thread cpuTempThread = new Thread(() -> {
-            for(int i = 0; i < 15; ++i) {
-                CpuTemperatureEvent tempEvent = new CpuTemperatureEvent(105);
-                kieSession.insert(tempEvent);
-                try {
-                    Thread.sleep(1000);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-            }
-        });
-        cpuTempThread.setDaemon(true);
-        cpuTempThread.start();
+        SystemState systemState = new SystemState(7168, 8192, true);
+        Process processHighPriority = new Process(1, 5, 1024, ProcessStatus.RUNNING, 0, Collections.nCopies(5, InstructionType.REGULAR));
+        CpuCore core1 = new CpuCore(1, CpuCoreStatus.BUSY, 0);
 
-        kieSession.fireUntilHalt();
+        kieSession.insert(systemState);
+        kieSession.insert(processHighPriority);
+        kieSession.insert(core1);
+        for(int i = 0; i < 5; ++i) {
+            CpuTemperatureEvent tempEvent = new CpuTemperatureEvent(105);
+            kieSession.insert(tempEvent);
+            clock.advanceTime(1, TimeUnit.SECONDS);
+        }
 
-//        assertAll(
-//                () -> assertEquals(1, firedRules)
-//        );
+        int firedRules = kieSession.fireAllRules();
+
+        assertAll(
+                () -> assertEquals(ProcessStatus.READY, processHighPriority.getStatus()),
+                () -> assertEquals(7168, systemState.getAvailableMemory()),
+                () -> assertFalse(systemState.isCpuEnabled()),
+                () -> assertEquals(CpuCoreStatus.IDLE, core1.getStatus()),
+                () -> assertNull(core1.getCurrentProcessId()),
+                () -> assertEquals(2, firedRules)
+        );
+
+        kieSession.dispose();
+    }
+
+    @Test
+    public void testCpuTemperatureEventsNotTriggered() {
+        KieSession kieSession = getSession();
+        SessionPseudoClock clock = kieSession.getSessionClock();
+
+        SystemState systemState = new SystemState(7168, 8192, true);
+        Process processHighPriority = new Process(1, 5, 1024, ProcessStatus.RUNNING, 0, Collections.nCopies(5, InstructionType.REGULAR));
+        CpuCore core1 = new CpuCore(1, CpuCoreStatus.BUSY, 0);
+
+        kieSession.insert(systemState);
+        kieSession.insert(processHighPriority);
+        kieSession.insert(core1);
+        for(int i = 0; i < 5; ++i) {
+            CpuTemperatureEvent tempEvent = new CpuTemperatureEvent(105);
+            kieSession.insert(tempEvent);
+            clock.advanceTime(10, TimeUnit.SECONDS);
+        }
+
+        int firedRules = kieSession.fireAllRules();
+
+        assertAll(
+                () -> assertEquals(ProcessStatus.EXIT, processHighPriority.getStatus()),
+                () -> assertEquals(8192, systemState.getAvailableMemory()),
+                () -> assertTrue(systemState.isCpuEnabled()),
+                () -> assertEquals(CpuCoreStatus.IDLE, core1.getStatus()),
+                () -> assertNull(core1.getCurrentProcessId()),
+                () -> assertEquals(7, firedRules)
+        );
+
+        kieSession.dispose();
+    }
+
+    @Test
+    public void testPriorityBoostingTemplate() {
+        KieSession kieSession = getSession();
+
+        SystemState systemState = new SystemState(8192, 8192, false);
+        Process process = new Process(1, 5, 1024, ProcessStatus.READY, 0, 0, Collections.nCopies(10, InstructionType.REGULAR));
+        CpuCore core = new CpuCore(null, CpuCoreStatus.IDLE, 0);
+
+        kieSession.insert(systemState);
+        kieSession.insert(process);
+        kieSession.insert(core);
+        int firedRules = kieSession.fireAllRules();
+
+        assertAll(
+                () -> assertTrue(process.getPriority() > 5),
+                () -> assertEquals(1, firedRules)
+        );
 
         kieSession.dispose();
     }
 
     private KieSession getSession() {
-        KieServices ks = KieServices.Factory.get();
-        KieContainer kieContainer = ks.getKieClasspathContainer();
-        return kieContainer.newKieSession(sessionName);
+        KieHelper kieHelper = new KieHelper();
+
+        // adding template ruleset
+        InputStream priorityBoostingTemplate = ForwardChainTests.class.getResourceAsStream("/rules/template/priority-boosting.drt");
+        InputStream data = ForwardChainTests.class.getResourceAsStream("/rules/template/priority-boosting.xls");
+        ExternalSpreadsheetCompiler converter = new ExternalSpreadsheetCompiler();
+        String priorityBoostingRules = converter.compile(data, priorityBoostingTemplate, 2, 2);
+        kieHelper.addContent(priorityBoostingRules, ResourceType.DRL);
+
+        // adding regular ruleset
+        InputStream regularRules = ForwardChainTests.class.getResourceAsStream("/rules/forward/forward.drl");
+        Resource regularRulesRes = ResourceFactory.newInputStreamResource(regularRules);
+        kieHelper.addResource(regularRulesRes, ResourceType.DRL);
+
+        // CEP configuration
+        KieBaseConfiguration kBaseConfig = KieServices.Factory.get().newKieBaseConfiguration();
+        kBaseConfig.setOption(EventProcessingOption.STREAM);
+
+        KieSessionConfiguration kSessionConfig = KieServices.Factory.get().newKieSessionConfiguration();
+        kSessionConfig.setOption(ClockTypeOption.get("pseudo"));
+
+        KieBase kBase = kieHelper.build(kBaseConfig);
+        KieSession kieSession = kBase.newKieSession(kSessionConfig, null);
+//        kieSession.addEventListener(new DebugAgendaEventListener());
+        return kieSession;
     }
 }
