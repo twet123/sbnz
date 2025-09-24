@@ -11,5 +11,4 @@ public class CpuCore {
     private Integer currentProcessId;
     private CpuCoreStatus status;
     private long lastStatusChange;
-    private boolean stateEnabled;
 }
