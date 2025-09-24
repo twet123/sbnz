@@ -1,0 +1,25 @@
+template header
+
+maxPriority
+minPriority
+lastStatusChangeThreshold
+priorityIncrement
+
+package rules.template;
+
+import com.ftn.sbnz.model.models.Process;
+import com.ftn.sbnz.model.enums.ProcessStatus;
+
+template "Priority boosting rules"
+
+rule "Boost ready process priority_@{row.rowNumber}"
+when
+    $p: Process(status == ProcessStatus.READY,
+                priority <= @{maxPriority},
+                priority >= @{minPriority},
+                System.currentTimeMillis() - lastStatusChange > @{lastStatusChangeThreshold})
+then
+    modify($p) { setPriority($p.getPriority() + @{priorityIncrement}), setLastStatusChange(System.currentTimeMillis()) }
+end
+
+end template
