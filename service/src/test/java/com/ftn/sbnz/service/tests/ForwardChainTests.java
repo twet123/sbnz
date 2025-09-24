@@ -1,7 +1,9 @@
 package com.ftn.sbnz.service.tests;
 
 import com.ftn.sbnz.model.enums.CpuCoreStatus;
+import com.ftn.sbnz.model.enums.InstructionType;
 import com.ftn.sbnz.model.enums.ProcessStatus;
+import com.ftn.sbnz.model.events.CpuTemperatureEvent;
 import com.ftn.sbnz.model.models.CpuCore;
 import com.ftn.sbnz.model.models.Process;
 import com.ftn.sbnz.model.models.SystemState;
@@ -9,6 +11,8 @@ import org.junit.Test;
 import org.kie.api.KieServices;
 import org.kie.api.runtime.KieContainer;
 import org.kie.api.runtime.KieSession;
+
+import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -20,9 +24,9 @@ public class ForwardChainTests {
     public void testProcessBecomesRunningWhenSufficientResources() {
         KieSession kieSession = getSession();
 
-        SystemState systemState = new SystemState(8192, 8192);
-        Process process = new Process(1, 5, 1024, ProcessStatus.NEW, 0, 10, 0, 1024);
-        CpuCore core = new CpuCore(null, CpuCoreStatus.IDLE, 0, true);
+        SystemState systemState = new SystemState(8192, 8192, true);
+        Process process = new Process(1, 5, 1024, ProcessStatus.NEW, 0, Collections.nCopies(10, InstructionType.REGULAR));
+        CpuCore core = new CpuCore(null, CpuCoreStatus.IDLE, 0);
 
         kieSession.insert(systemState);
         kieSession.insert(process);
@@ -33,7 +37,7 @@ public class ForwardChainTests {
                 () -> assertEquals(ProcessStatus.EXIT, process.getStatus()),
                 () -> assertEquals(8192, systemState.getAvailableMemory()),
                 () -> assertNotEquals(0, process.getLastStatusChange()),
-                () -> assertEquals(13, firedRules),
+                () -> assertEquals(14, firedRules),
                 () -> assertEquals(CpuCoreStatus.IDLE, core.getStatus())
         );
 
@@ -44,9 +48,9 @@ public class ForwardChainTests {
     public void testProcessDoesNotBecomeRunningWhenInsufficientResources() {
         KieSession kieSession = getSession();
 
-        SystemState systemState = new SystemState(1000, 1000);
-        Process process = new Process(1, 5, 1024, ProcessStatus.NEW, 0, 10, 0, 1024);
-        CpuCore core = new CpuCore(null, CpuCoreStatus.IDLE, 0, true);
+        SystemState systemState = new SystemState(1000, 1000, true);
+        Process process = new Process(1, 5, 1024, ProcessStatus.NEW, 0, Collections.nCopies(10, InstructionType.REGULAR));
+        CpuCore core = new CpuCore(null, CpuCoreStatus.IDLE, 0);
 
         kieSession.insert(systemState);
         kieSession.insert(process);
@@ -66,10 +70,10 @@ public class ForwardChainTests {
     public void testMultipleProcessesPriorityRecognition() {
         KieSession kieSession = getSession();
 
-        SystemState systemState = new SystemState(8192, 8192);
-        Process processHighPriority = new Process(1, 5, 1024, ProcessStatus.NEW, 0, 5, 0, 1024);
-        Process processLowPriority = new Process(2, 1, 1024, ProcessStatus.NEW, 0, 10, 0, 1024);
-        CpuCore core = new CpuCore(null, CpuCoreStatus.IDLE, 0, true);
+        SystemState systemState = new SystemState(8192, 8192, true);
+        Process processHighPriority = new Process(1, 5, 1024, ProcessStatus.NEW, 0, Collections.nCopies(5, InstructionType.REGULAR));
+        Process processLowPriority = new Process(2, 1, 1024, ProcessStatus.NEW, 0, Collections.nCopies(10, InstructionType.REGULAR));
+        CpuCore core = new CpuCore(null, CpuCoreStatus.IDLE, 0);
 
         kieSession.insert(systemState);
         kieSession.insert(processHighPriority);
@@ -84,7 +88,7 @@ public class ForwardChainTests {
                 () -> assertNotEquals(0, processHighPriority.getLastStatusChange()),
                 () -> assertNotEquals(0, processLowPriority.getLastStatusChange()),
                 () -> assertTrue(processHighPriority.getLastStatusChange() < processLowPriority.getLastStatusChange()),
-                () -> assertEquals(21, firedRules),
+                () -> assertEquals(22, firedRules),
                 () -> assertEquals(CpuCoreStatus.IDLE, core.getStatus())
         );
 
@@ -95,11 +99,11 @@ public class ForwardChainTests {
     public void testMultipleCores() {
         KieSession kieSession = getSession();
 
-        SystemState systemState = new SystemState(8192, 8192);
-        Process processHighPriority = new Process(1, 5, 1024, ProcessStatus.NEW, 0, 5, 0, 1024);
-        Process processLowPriority = new Process(2, 1, 1024, ProcessStatus.NEW, 0, 10, 0, 1024);
-        CpuCore core1 = new CpuCore(null, CpuCoreStatus.IDLE, 0, true);
-        CpuCore core2 = new CpuCore(null, CpuCoreStatus.IDLE, 0, true);
+        SystemState systemState = new SystemState(8192, 8192, true);
+        Process processHighPriority = new Process(1, 5, 1024, ProcessStatus.NEW, 0, Collections.nCopies(5, InstructionType.REGULAR));
+        Process processLowPriority = new Process(2, 1, 1024, ProcessStatus.NEW, 0, Collections.nCopies(10, InstructionType.REGULAR));
+        CpuCore core1 = new CpuCore(null, CpuCoreStatus.IDLE, 0);
+        CpuCore core2 = new CpuCore(null, CpuCoreStatus.IDLE, 0);
 
         kieSession.insert(systemState);
         kieSession.insert(processHighPriority);
@@ -115,10 +119,37 @@ public class ForwardChainTests {
                 () -> assertNotEquals(0, processHighPriority.getLastStatusChange()),
                 () -> assertNotEquals(0, processLowPriority.getLastStatusChange()),
                 // we wont know in which order the processes will execute since they are being executed "in parallel"
-                () -> assertEquals(21, firedRules),
+                () -> assertEquals(22, firedRules),
                 () -> assertEquals(CpuCoreStatus.IDLE, core1.getStatus()),
                 () -> assertEquals(CpuCoreStatus.IDLE, core2.getStatus())
         );
+
+        kieSession.dispose();
+    }
+
+    @Test
+    public void testCpuTemperatureEvents() {
+        KieSession kieSession = getSession();
+
+        Thread cpuTempThread = new Thread(() -> {
+            for(int i = 0; i < 15; ++i) {
+                CpuTemperatureEvent tempEvent = new CpuTemperatureEvent(105);
+                kieSession.insert(tempEvent);
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+        });
+        cpuTempThread.setDaemon(true);
+        cpuTempThread.start();
+
+        kieSession.fireUntilHalt();
+
+//        assertAll(
+//                () -> assertEquals(1, firedRules)
+//        );
 
         kieSession.dispose();
     }

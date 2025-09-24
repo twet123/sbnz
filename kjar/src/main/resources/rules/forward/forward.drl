@@ -2,17 +2,21 @@ package rules.forward;
 
 import com.ftn.sbnz.model.models.Process;
 import com.ftn.sbnz.model.enums.ProcessStatus;
-import com.ftn.sbnz.model.models.SystemState
-import com.ftn.sbnz.model.models.CpuCore
-import com.ftn.sbnz.model.enums.CpuCoreStatus
+import com.ftn.sbnz.model.models.SystemState;
+import com.ftn.sbnz.model.models.CpuCore;
+import com.ftn.sbnz.model.enums.CpuCoreStatus;
+import com.ftn.sbnz.model.enums.InstructionType;
+import com.ftn.sbnz.model.events.CpuTemperatureEvent;
+import com.ftn.sbnz.model.events.CpuOverheatEvent;
+import com.ftn.sbnz.model.events.IOEvent;
 
 rule "Make process ready"
     when
         $p: Process(status == ProcessStatus.NEW)
         $ss: SystemState(availableMemory >= $p.memoryRequirement)
     then
-        modify($p){ setStatus(ProcessStatus.READY), setLastStatusChange(System.currentTimeMillis()) }
-        modify($ss){ setAvailableMemory($ss.getAvailableMemory() - $p.getMemoryRequirement()) }
+        modify($p) { setStatus(ProcessStatus.READY), setLastStatusChange(System.currentTimeMillis()) }
+        modify($ss) { setAvailableMemory($ss.getAvailableMemory() - $p.getMemoryRequirement()) }
 end
 
 rule "Schedule process with the highest priority"
@@ -22,7 +26,8 @@ rule "Schedule process with the highest priority"
             max($priority)
         )
         $p: Process(status == ProcessStatus.READY, priority == $maxPriority)
-        $core: CpuCore(status == CpuCoreStatus.IDLE, stateEnabled == true)
+        $core: CpuCore(status == CpuCoreStatus.IDLE)
+        $ss: SystemState(cpuEnabled == true)
     then
         modify($p) { setStatus(ProcessStatus.RUNNING), setLastStatusChange(System.currentTimeMillis()) }
         modify($core) { setCurrentProcessId($p.getId()), setLastStatusChange(System.currentTimeMillis()), setStatus(CpuCoreStatus.BUSY) }
@@ -30,18 +35,85 @@ end
 
 rule "Execute process"
     when
-        $p: Process(status == ProcessStatus.RUNNING, currentInstruction < totalInstructions)
+        $p: Process(status == ProcessStatus.RUNNING, currentInstruction < instructions.size())
     then
         modify($p) { setCurrentInstruction($p.getCurrentInstruction() + 1) }
 end
 
+rule "Block process on I/O instructions"
+    when
+        $p: Process(status == ProcessStatus.RUNNING, instructions[$p.currentInstruction] == InstructionType.IO)
+        $core: CpuCore(currentProcessId == $p.id)
+    then
+        modify($p) { setStatus(ProcessStatus.BLOCKED) }
+        modify($core) { setCurrentProcessId(null), setStatus(CpuCoreStatus.IDLE), setLastStatusChange(System.currentTimeMillis()) }
+end
+
+rule "Preemt when there is a process with higher priority"
+    when
+        $p: Process(status == ProcessStatus.RUNNING)
+        $pHp: Process(status == ProcessStatus.READY, priority > $p.priority)
+        $core: CpuCore(currentProcessId == $p.id, status != CpuCoreStatus.IDLE)
+    then
+        modify($p) { setStatus(ProcessStatus.READY) }
+        modify($core) { setCurrentProcessId(null), setStatus(CpuCoreStatus.IDLE) }
+end
+
 rule "Finish executing the process"
     when
-        $p: Process(status == ProcessStatus.RUNNING, currentInstruction == totalInstructions)
+        $p: Process(status == ProcessStatus.RUNNING, currentInstruction == instructions.size())
         $core: CpuCore(currentProcessId == $p.id)
         $ss: SystemState()
     then
         modify($p) { setStatus(ProcessStatus.EXIT), setLastStatusChange(System.currentTimeMillis()) }
         modify($core) { setCurrentProcessId(null), setStatus(CpuCoreStatus.IDLE), setLastStatusChange(System.currentTimeMillis()) }
         modify($ss) { setAvailableMemory($ss.getAvailableMemory() + $p.getMemoryRequirement()) }
+end
+
+//rule "Detect CPU overheating"
+//    when
+//        $criticalTempCount: Number(intValue >= 5) from accumulate(
+//            $tempEvent: CpuTemperatureEvent(temperature > 100) over window:time(30s),
+//            count(1)
+//        )
+//        $ss: SystemState(cpuEnabled == true)
+//    then
+//        modify($ss) { setCpuEnabled(false) }
+//        insert(new CpuOverheatEvent())
+//end
+
+rule "Enable CPU after cooling down"
+    when
+        $coolTempCount: Number(intValue >= 5) from accumulate(
+            $tempEvent: CpuTemperatureEvent(temperature < 50) over window:time(30s),
+            count(1)
+        )
+        $ss: SystemState(cpuEnabled == false)
+    then
+        modify($ss) { setCpuEnabled(true) }
+end
+
+rule "Offload cores when overheating"
+    when
+        CpuOverheatEvent()
+        $core: CpuCore(status != CpuCoreStatus.IDLE)
+        $p: Process(id == $core.currentProcessId)
+    then
+        modify ($core) { setStatus(CpuCoreStatus.IDLE) }
+        modify($p) { setStatus(ProcessStatus.READY) }
+end
+
+rule "Handle I/O events"
+    when
+        $io: IOEvent()
+        $p: Process(id == $io.processId, status == ProcessStatus.BLOCKED)
+    then
+        modify($p) { setStatus(ProcessStatus.READY), setCurrentInstruction($p.getCurrentInstruction() + 1) }
+end
+
+rule "Stop system"
+    when
+        not Process( status != ProcessStatus.EXIT )
+    then
+        drools.halt();
 end
