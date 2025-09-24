@@ -1,5 +1,6 @@
 package com.ftn.sbnz.service;
 
+import com.ftn.sbnz.model.enums.InstructionType;
 import com.ftn.sbnz.model.enums.ProcessStatus;
 import com.ftn.sbnz.model.models.Process;
 import com.ftn.sbnz.model.models.SystemState;
@@ -11,7 +12,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import java.util.List;
+import java.util.Collections;
 
 
 @Service
@@ -27,8 +28,8 @@ public class SampleAppService {
     }
 
     public void test() {
-        SystemState systemState = new SystemState(8192, 8192);
-        Process testProcess = new Process(1, 5, 1024, ProcessStatus.NEW, 0, 10, 0, 1024);
+        SystemState systemState = new SystemState(8192, 8192, false);
+        Process testProcess = new Process(1, 5, 1024, ProcessStatus.NEW, 0, Collections.nCopies(10, InstructionType.REGULAR));
 
         KieSession kieSession = kieContainer.newKieSession("forwardSession");
         kieSession.insert(systemState);
