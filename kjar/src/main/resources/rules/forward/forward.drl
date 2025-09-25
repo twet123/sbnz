@@ -9,13 +9,15 @@ import com.ftn.sbnz.model.enums.InstructionType;
 import com.ftn.sbnz.model.events.CpuTemperatureEvent;
 import com.ftn.sbnz.model.events.CpuOverheatEvent;
 import com.ftn.sbnz.model.events.IOEvent;
+import com.ftn.sbnz.model.events.PageFaultEvent;
+import com.ftn.sbnz.model.events.SuspendLowestPriorityProcessEvent;
 
 rule "Make process ready"
     when
         $p: Process(status == ProcessStatus.NEW)
         $ss: SystemState(availableMemory >= $p.memoryRequirement)
     then
-        modify($p) { setStatus(ProcessStatus.READY), setLastStatusChange(System.currentTimeMillis()) }
+        modify($p) { setStatus(ProcessStatus.READY) }
         modify($ss) { setAvailableMemory($ss.getAvailableMemory() - $p.getMemoryRequirement()) }
 end
 
@@ -26,29 +28,53 @@ rule "Schedule process with the highest priority"
             max($priority)
         )
         $p: Process(status == ProcessStatus.READY, priority == $maxPriority)
-        $core: CpuCore(status == CpuCoreStatus.IDLE)
+        $core: CpuCore(currentProcessId == null, status == CpuCoreStatus.IDLE)
         $ss: SystemState(cpuEnabled == true)
     then
-        modify($p) { setStatus(ProcessStatus.RUNNING), setLastStatusChange(System.currentTimeMillis()) }
-        modify($core) { setCurrentProcessId($p.getId()), setLastStatusChange(System.currentTimeMillis()), setStatus(CpuCoreStatus.BUSY) }
+        modify($p) { setStatus(ProcessStatus.RUNNING) }
+        modify($core) { setCurrentProcessId($p.getId()), setStatus(CpuCoreStatus.BUSY) }
 end
 
 rule "Execute process"
     when
         $p: Process(status == ProcessStatus.RUNNING, currentInstruction < instructions.size())
+        $core: CpuCore(currentProcessId == $p.id, status == CpuCoreStatus.BUSY)
         $ss: SystemState(cpuEnabled == true)
     then
         modify($p) { setCurrentInstruction($p.getCurrentInstruction() + 1) }
 end
 
+rule "Execute process while paging and not pagingFlag"
+    when
+        $p: Process(status == ProcessStatus.RUNNING, currentInstruction < instructions.size())
+        $core: CpuCore(currentProcessId == $p.id, status == CpuCoreStatus.PAGING, pagingFlag == false)
+        $ss: SystemState(cpuEnabled == true)
+    then
+        modify($core) { setPagingFlag(true) }
+end
+
+rule "Execute process while paging and yes pagingFlag"
+    when
+        $p: Process(status == ProcessStatus.RUNNING, currentInstruction < instructions.size())
+        $core: CpuCore(currentProcessId == $p.id, status == CpuCoreStatus.PAGING, pagingFlag == true)
+        $ss: SystemState(cpuEnabled == true)
+    then
+        modify($p) { setCurrentInstruction($p.getCurrentInstruction() + 1) }
+        modify($core) { setPagingFlag(false) }
+end
+
 rule "Block process on I/O instructions"
 salience 3
     when
-        $p: Process(status == ProcessStatus.RUNNING, currentInstruction < instructions.size(), $currInstruction: currentInstruction, instructions[$currInstruction] == InstructionType.IO)
+        $p: Process(status == ProcessStatus.RUNNING,
+                    currentInstruction < instructions.size(),
+                    $currInstruction: currentInstruction,
+                    instructions[$currInstruction] == InstructionType.IO)
         $core: CpuCore(currentProcessId == $p.id, status != CpuCoreStatus.IDLE)
+        $ss: SystemState(cpuEnabled == true)
     then
-        modify($p) { setStatus(ProcessStatus.BLOCKED), setLastStatusChange(System.currentTimeMillis()) }
-        modify($core) { setCurrentProcessId(null), setStatus(CpuCoreStatus.IDLE), setLastStatusChange(System.currentTimeMillis()) }
+        modify($p) { setStatus(ProcessStatus.BLOCKED) }
+        modify($core) { setCurrentProcessId(null), setStatus(CpuCoreStatus.IDLE) }
 end
 
 rule "Preemt when there is a process with higher priority"
@@ -57,9 +83,25 @@ salience 3
         $p: Process(status == ProcessStatus.RUNNING)
         $pHp: Process(status == ProcessStatus.READY, priority > $p.priority)
         $core: CpuCore(currentProcessId == $p.id, status != CpuCoreStatus.IDLE)
+        $ss: SystemState(cpuEnabled == true)
     then
         modify($p) { setStatus(ProcessStatus.READY) }
         modify($core) { setCurrentProcessId(null), setStatus(CpuCoreStatus.IDLE) }
+end
+
+rule "Handle suspended process"
+    when
+        $p: Process(status == ProcessStatus.SUSPENDED)
+        $ss: SystemState(availableMemory > $p.safeMemoryLimit)
+    then
+        modify($p) { setStatus(ProcessStatus.READY) }
+end
+
+rule "Return core to normal after paging"
+    when
+        $core: CpuCore(status == CpuCoreStatus.PAGING, System.currentTimeMillis() - lastStatusChange > 2000)
+    then
+        modify($core) { setStatus(CpuCoreStatus.BUSY), setPagingFlag(false) }
 end
 
 rule "Finish executing the process"
@@ -67,10 +109,10 @@ salience 5
     when
         $p: Process(status == ProcessStatus.RUNNING, currentInstruction == instructions.size())
         $core: CpuCore(currentProcessId == $p.id, status != CpuCoreStatus.IDLE)
-        $ss: SystemState()
+        $ss: SystemState(cpuEnabled == true)
     then
-        modify($p) { setStatus(ProcessStatus.EXIT), setLastStatusChange(System.currentTimeMillis()) }
-        modify($core) { setCurrentProcessId(null), setStatus(CpuCoreStatus.IDLE), setLastStatusChange(System.currentTimeMillis()) }
+        modify($p) { setStatus(ProcessStatus.EXIT) }
+        modify($core) { setCurrentProcessId(null), setStatus(CpuCoreStatus.IDLE) }
         modify($ss) { setAvailableMemory($ss.getAvailableMemory() + $p.getMemoryRequirement()) }
 end
 
@@ -94,9 +136,8 @@ salience 2
         $core: CpuCore(status != CpuCoreStatus.IDLE)
         $p: Process(id == $core.currentProcessId, status == ProcessStatus.RUNNING)
     then
-        //TODO: Modify setter of statuses, so it automatically sets lastStatusChange
-        modify($core) { setCurrentProcessId(null), setStatus(CpuCoreStatus.IDLE), setLastStatusChange(System.currentTimeMillis()) }
-        modify($p) { setStatus(ProcessStatus.READY), setLastStatusChange(System.currentTimeMillis()) }
+        modify($core) { setCurrentProcessId(null), setStatus(CpuCoreStatus.IDLE) }
+        modify($p) { setStatus(ProcessStatus.READY) }
 end
 
 rule "Enable CPU after cooling down"
@@ -118,9 +159,45 @@ rule "Handle I/O events"
         modify($p) { setStatus(ProcessStatus.READY), setCurrentInstruction($p.getCurrentInstruction() + 1) }
 end
 
+rule "Handle page fault events"
+    when
+        $pf: PageFaultEvent()
+        $p: Process(id == $pf.processId, status == ProcessStatus.RUNNING)
+        $core: CpuCore(currentProcessId == $p.id, status == CpuCoreStatus.BUSY)
+    then
+        modify($core) { setStatus(CpuCoreStatus.PAGING) }
+end
+
+rule "Detect CPU thrashing"
+    when
+        $pageFaultCount: Number(intValue >= 5) from accumulate(
+            PageFaultEvent() over window:time(10s),
+            count(1)
+        )
+        $ss: SystemState(availableMemory < criticalMemoryLimit)
+    then
+        insert(new SuspendLowestPriorityProcessEvent());
+end
+
+rule "Suspend lowest priority process"
+    when
+        SuspendLowestPriorityProcessEvent()
+        $minPriority: Number() from accumulate(
+            Process(status == ProcessStatus.RUNNING, $priority: priority),
+            min($priority)
+        )
+        $p: Process(status == ProcessStatus.RUNNING, priority == $minPriority)
+        $core: CpuCore(currentProcessId == $p.id, status != CpuCoreStatus.IDLE)
+    then
+        modify($p) { setStatus(ProcessStatus.SUSPENDED) }
+        modify($core) { setCurrentProcessId(null), setStatus(CpuCoreStatus.IDLE) }
+end
+
+// TODO: template za primanje procesa
+
 rule "Stop system"
     when
-        not Process( status != ProcessStatus.EXIT )
+        not Process(status != ProcessStatus.EXIT)
     then
         drools.halt();
 end
