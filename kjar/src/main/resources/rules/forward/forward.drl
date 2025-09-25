@@ -12,15 +12,6 @@ import com.ftn.sbnz.model.events.IOEvent;
 import com.ftn.sbnz.model.events.PageFaultEvent;
 import com.ftn.sbnz.model.events.SuspendLowestPriorityProcessEvent;
 
-rule "Make process ready"
-    when
-        $p: Process(status == ProcessStatus.NEW)
-        $ss: SystemState(availableMemory >= $p.memoryRequirement)
-    then
-        modify($p) { setStatus(ProcessStatus.READY) }
-        modify($ss) { setAvailableMemory($ss.getAvailableMemory() - $p.getMemoryRequirement()) }
-end
-
 rule "Schedule process with the highest priority"
     when
         $maxPriority: Number() from accumulate(

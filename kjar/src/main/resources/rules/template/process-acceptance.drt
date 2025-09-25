@@ -1,0 +1,27 @@
+template header
+
+maxPriority
+minPriority
+allowedMemoryUsage
+
+package rules.template;
+
+import com.ftn.sbnz.model.models.Process;
+import com.ftn.sbnz.model.models.SystemState;
+import com.ftn.sbnz.model.enums.ProcessStatus;
+
+template "Make process ready"
+
+rule "Make process ready_@{row.rowNumber}"
+salience 3
+when
+    $p: Process(status == ProcessStatus.NEW,
+                priority <= @{maxPriority},
+                priority >= @{minPriority})
+    $ss: SystemState(availableMemory >= $p.memoryRequirement, getMemoryUsage() < @{allowedMemoryUsage})
+then
+    modify($p) { setStatus(ProcessStatus.READY) }
+    modify($ss) { setAvailableMemory($ss.getAvailableMemory() - $p.getMemoryRequirement()) }
+end
+
+end template

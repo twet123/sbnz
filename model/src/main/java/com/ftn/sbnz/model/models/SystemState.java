@@ -18,4 +18,8 @@ public class SystemState {
         this.criticalMemoryLimit = 0;
         this.cpuEnabled = cpuEnabled;
     }
+
+    public float getMemoryUsage() {
+        return 1 - (float)availableMemory / totalMemory;
+    }
 }

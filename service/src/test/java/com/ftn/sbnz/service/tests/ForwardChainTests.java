@@ -346,6 +346,11 @@ public class ForwardChainTests {
         String priorityBoostingRules = converter.compile(data, priorityBoostingTemplate, 2, 2);
         kieHelper.addContent(priorityBoostingRules, ResourceType.DRL);
 
+        InputStream processAcceptanceTemplate = ForwardChainTests.class.getResourceAsStream("/rules/template/process-acceptance.drt");
+        data = ForwardChainTests.class.getResourceAsStream("/rules/template/process-acceptance.xls");
+        String processAcceptanceRules = converter.compile(data, processAcceptanceTemplate, 2, 2);
+        kieHelper.addContent(processAcceptanceRules, ResourceType.DRL);
+
         // adding regular ruleset
         InputStream regularRules = ForwardChainTests.class.getResourceAsStream("/rules/forward/forward.drl");
         Resource regularRulesRes = ResourceFactory.newInputStreamResource(regularRules);
