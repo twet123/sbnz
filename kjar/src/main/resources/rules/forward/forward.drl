@@ -42,15 +42,17 @@ rule "Execute process"
 end
 
 rule "Block process on I/O instructions"
+salience 3
     when
-        $p: Process(status == ProcessStatus.RUNNING, instructions[$p.currentInstruction] == InstructionType.IO)
-        $core: CpuCore(currentProcessId == $p.id)
+        $p: Process(status == ProcessStatus.RUNNING, currentInstruction < instructions.size(), $currInstruction: currentInstruction, instructions[$currInstruction] == InstructionType.IO)
+        $core: CpuCore(currentProcessId == $p.id, status != CpuCoreStatus.IDLE)
     then
-        modify($p) { setStatus(ProcessStatus.BLOCKED) }
+        modify($p) { setStatus(ProcessStatus.BLOCKED), setLastStatusChange(System.currentTimeMillis()) }
         modify($core) { setCurrentProcessId(null), setStatus(CpuCoreStatus.IDLE), setLastStatusChange(System.currentTimeMillis()) }
 end
 
 rule "Preemt when there is a process with higher priority"
+salience 3
     when
         $p: Process(status == ProcessStatus.RUNNING)
         $pHp: Process(status == ProcessStatus.READY, priority > $p.priority)
@@ -61,9 +63,10 @@ rule "Preemt when there is a process with higher priority"
 end
 
 rule "Finish executing the process"
+salience 5
     when
         $p: Process(status == ProcessStatus.RUNNING, currentInstruction == instructions.size())
-        $core: CpuCore(currentProcessId == $p.id)
+        $core: CpuCore(currentProcessId == $p.id, status != CpuCoreStatus.IDLE)
         $ss: SystemState()
     then
         modify($p) { setStatus(ProcessStatus.EXIT), setLastStatusChange(System.currentTimeMillis()) }
