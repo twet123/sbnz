@@ -1,9 +1,12 @@
 package com.ftn.sbnz.service.tests;
 
+import com.ftn.sbnz.listener.TriggeredRulesListener;
+import com.ftn.sbnz.listener.WorkingMemoryListener;
 import com.ftn.sbnz.model.enums.CpuCoreStatus;
 import com.ftn.sbnz.model.enums.InstructionType;
 import com.ftn.sbnz.model.enums.ProcessStatus;
 import com.ftn.sbnz.model.events.CpuTemperatureEvent;
+import com.ftn.sbnz.model.events.IOEvent;
 import com.ftn.sbnz.model.models.CpuCore;
 import com.ftn.sbnz.model.models.Process;
 import com.ftn.sbnz.model.models.SystemState;
@@ -13,7 +16,6 @@ import org.kie.api.KieBase;
 import org.kie.api.KieBaseConfiguration;
 import org.kie.api.KieServices;
 import org.kie.api.conf.EventProcessingOption;
-import org.kie.api.event.rule.DebugAgendaEventListener;
 import org.kie.api.io.Resource;
 import org.kie.api.io.ResourceType;
 import org.kie.api.runtime.KieSession;
@@ -25,6 +27,7 @@ import org.kie.internal.utils.KieHelper;
 
 import java.io.InputStream;
 import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -205,6 +208,38 @@ public class ForwardChainTests {
     }
 
     @Test
+    public void testCpuCooledDownTriggered() {
+        KieSession kieSession = getSession();
+        SessionPseudoClock clock = kieSession.getSessionClock();
+
+        SystemState systemState = new SystemState(7168, 8192, false);
+        Process processHighPriority = new Process(1, 5, 1024, ProcessStatus.READY, 1, Collections.nCopies(5, InstructionType.REGULAR));
+        CpuCore core1 = new CpuCore(null, CpuCoreStatus.IDLE, 0);
+
+        kieSession.insert(systemState);
+        kieSession.insert(processHighPriority);
+        kieSession.insert(core1);
+        for(int i = 0; i < 5; ++i) {
+            CpuTemperatureEvent tempEvent = new CpuTemperatureEvent(49);
+            kieSession.insert(tempEvent);
+            clock.advanceTime(1, TimeUnit.SECONDS);
+        }
+
+        int firedRules = kieSession.fireAllRules();
+
+        assertAll(
+                () -> assertEquals(ProcessStatus.EXIT, processHighPriority.getStatus()),
+                () -> assertEquals(8192, systemState.getAvailableMemory()),
+                () -> assertTrue(systemState.isCpuEnabled()),
+                () -> assertEquals(CpuCoreStatus.IDLE, core1.getStatus()),
+                () -> assertNull(core1.getCurrentProcessId()),
+                () -> assertEquals(8, firedRules)
+        );
+
+        kieSession.dispose();
+    }
+
+    @Test
     public void testPriorityBoostingTemplate() {
         KieSession kieSession = getSession();
 
@@ -220,6 +255,82 @@ public class ForwardChainTests {
         assertAll(
                 () -> assertTrue(process.getPriority() > 5),
                 () -> assertEquals(1, firedRules)
+        );
+
+        kieSession.dispose();
+    }
+
+    @Test
+    public void testPreemption() {
+        KieSession kieSession = getSession();
+
+        SystemState systemState = new SystemState(6144, 8192, true);
+        Process processLowPriority = new Process(1, 3, 1024, ProcessStatus.RUNNING, 0, Collections.nCopies(10, InstructionType.REGULAR));
+        CpuCore core1 = new CpuCore(1, CpuCoreStatus.BUSY, 0);
+        Process processHighPriority = new Process(2, 8, 1024, ProcessStatus.READY, 0, Collections.nCopies(10, InstructionType.REGULAR));
+
+        kieSession.insert(systemState);
+        kieSession.insert(processLowPriority);
+        kieSession.insert(core1);
+        kieSession.insert(processHighPriority);
+        int firedRules = kieSession.fireAllRules();
+
+        assertAll(
+                () -> assertEquals(ProcessStatus.EXIT, processLowPriority.getStatus()),
+                () -> assertEquals(ProcessStatus.EXIT, processHighPriority.getStatus()),
+                () -> assertEquals(8192, systemState.getAvailableMemory()),
+                () -> assertEquals(CpuCoreStatus.IDLE, core1.getStatus()),
+                () -> assertNull(core1.getCurrentProcessId()),
+                () -> assertTrue(processLowPriority.getLastStatusChange() > processHighPriority.getLastStatusChange()),
+                () -> assertEquals(26, firedRules)
+        );
+
+        kieSession.dispose();
+    }
+
+    @Test
+    public void testIOBlocking() {
+        KieSession kieSession = getSession();
+
+        SystemState systemState = new SystemState(7168, 8192, true);
+        Process processLowPriority = new Process(1, 3, 1024, ProcessStatus.RUNNING, 0, List.of(InstructionType.REGULAR, InstructionType.IO, InstructionType.REGULAR));
+        CpuCore core1 = new CpuCore(1, CpuCoreStatus.BUSY, 0);
+
+        kieSession.insert(systemState);
+        kieSession.insert(processLowPriority);
+        kieSession.insert(core1);
+        int firedRules = kieSession.fireAllRules();
+
+        assertAll(
+                () -> assertEquals(ProcessStatus.BLOCKED, processLowPriority.getStatus()),
+                () -> assertEquals(CpuCoreStatus.IDLE, core1.getStatus()),
+                () -> assertNull(core1.getCurrentProcessId()),
+                () -> assertEquals(2, firedRules)
+        );
+
+        kieSession.dispose();
+    }
+
+    @Test
+    public void testIOUnblocking() {
+        KieSession kieSession = getSession();
+
+        SystemState systemState = new SystemState(7168, 8192, true);
+        Process processLowPriority = new Process(1, 3, 1024, ProcessStatus.BLOCKED, 1, List.of(InstructionType.REGULAR, InstructionType.IO, InstructionType.REGULAR));
+        CpuCore core1 = new CpuCore(null, CpuCoreStatus.IDLE, 0);
+
+        kieSession.insert(systemState);
+        kieSession.insert(processLowPriority);
+        kieSession.insert(core1);
+        kieSession.insert(new IOEvent(1));
+        int firedRules = kieSession.fireAllRules();
+
+        assertAll(
+                () -> assertEquals(ProcessStatus.EXIT, processLowPriority.getStatus()),
+                () -> assertEquals(CpuCoreStatus.IDLE, core1.getStatus()),
+                () -> assertNull(core1.getCurrentProcessId()),
+                () -> assertEquals(8192, systemState.getAvailableMemory()),
+                () -> assertEquals(5, firedRules)
         );
 
         kieSession.dispose();
@@ -249,7 +360,8 @@ public class ForwardChainTests {
 
         KieBase kBase = kieHelper.build(kBaseConfig);
         KieSession kieSession = kBase.newKieSession(kSessionConfig, null);
-//        kieSession.addEventListener(new DebugAgendaEventListener());
+        kieSession.addEventListener(new TriggeredRulesListener());
+        kieSession.addEventListener(new WorkingMemoryListener());
         return kieSession;
     }
 }
