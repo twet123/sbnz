@@ -11,5 +11,5 @@ import org.kie.api.definition.type.Role;
 @AllArgsConstructor
 public class IOEvent {
 
-    private long processId;
+    private int processId;
 }
