@@ -89,6 +89,7 @@ rule "Handle suspended process"
 end
 
 rule "Return core to normal after paging"
+salience 2
     when
         $core: CpuCore(status == CpuCoreStatus.PAGING, System.currentTimeMillis() - lastStatusChange > 2000)
     then
@@ -151,6 +152,7 @@ rule "Handle I/O events"
 end
 
 rule "Handle page fault events"
+salience 2
     when
         $pf: PageFaultEvent()
         $p: Process(id == $pf.processId, status == ProcessStatus.RUNNING)
@@ -160,6 +162,7 @@ rule "Handle page fault events"
 end
 
 rule "Detect CPU thrashing"
+salience 2
     when
         $pageFaultCount: Number(intValue >= 5) from accumulate(
             PageFaultEvent() over window:time(10s),
@@ -171,6 +174,7 @@ rule "Detect CPU thrashing"
 end
 
 rule "Suspend lowest priority process"
+salience 2
     when
         SuspendLowestPriorityProcessEvent()
         $minPriority: Number() from accumulate(
@@ -183,8 +187,6 @@ rule "Suspend lowest priority process"
         modify($p) { setStatus(ProcessStatus.SUSPENDED) }
         modify($core) { setCurrentProcessId(null), setStatus(CpuCoreStatus.IDLE) }
 end
-
-// TODO: template za primanje procesa
 
 rule "Stop system"
     when
