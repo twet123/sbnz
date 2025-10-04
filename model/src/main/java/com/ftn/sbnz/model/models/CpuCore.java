@@ -13,6 +13,13 @@ public class CpuCore {
     private long lastStatusChange;
     private boolean pagingFlag;
 
+    public CpuCore() {
+        this.currentProcessId = null;
+        this.status = CpuCoreStatus.IDLE;
+        this.lastStatusChange = System.currentTimeMillis();
+        this.pagingFlag = false;
+    }
+
     public CpuCore(Integer currentProcessId, CpuCoreStatus status, long lastStatusChange) {
         this.currentProcessId = currentProcessId;
         this.status = status;

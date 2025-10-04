@@ -12,6 +12,13 @@ public class SystemState {
     private int criticalMemoryLimit;
     private boolean cpuEnabled;
 
+    public SystemState(int totalMemory) {
+        this.availableMemory = totalMemory;
+        this.totalMemory = totalMemory;
+        this.criticalMemoryLimit = (int) Math.floor(0.15 * totalMemory);
+        this.cpuEnabled = true;
+    }
+
     public SystemState(int availableMemory, int totalMemory, boolean cpuEnabled) {
         this.availableMemory = availableMemory;
         this.totalMemory = totalMemory;

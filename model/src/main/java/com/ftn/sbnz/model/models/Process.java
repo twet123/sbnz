@@ -20,6 +20,17 @@ public class Process {
     private long lastStatusChange;
     private List<InstructionType> instructions;
 
+    public Process(int id, int priority, int memoryRequirement, int safeMemoryLimit, List<InstructionType> instructions) {
+        this.id = id;
+        this.priority = priority;
+        this.memoryRequirement = memoryRequirement;
+        this.safeMemoryLimit = safeMemoryLimit;
+        this.status = ProcessStatus.NEW;
+        this.currentInstruction = 0;
+        this.lastStatusChange = System.currentTimeMillis();
+        this.instructions = instructions;
+    }
+
     public Process(int id, int priority, int memoryRequirement, ProcessStatus status, int currentInstruction, List<InstructionType> instructions) {
         this.id = id;
         this.priority = priority;
