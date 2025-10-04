@@ -7,7 +7,22 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (data: any) => {
-    console.log(data);
+    setIsLoading(true);
+    try {
+      // TODO: Replace with actual endpoint
+      const response = await fetch("http://localhost:8080/schedule", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+
+      const result = await response.json();
+      // setExecutionSteps(result)
+    } catch (error) {
+      console.error("Error submitting data:", error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
