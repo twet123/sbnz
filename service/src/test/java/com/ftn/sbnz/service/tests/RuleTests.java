@@ -1,44 +1,30 @@
 package com.ftn.sbnz.service.tests;
 
-import com.ftn.sbnz.listener.TriggeredRulesListener;
-import com.ftn.sbnz.listener.WorkingMemoryListener;
 import com.ftn.sbnz.model.enums.CpuCoreStatus;
 import com.ftn.sbnz.model.enums.InstructionType;
 import com.ftn.sbnz.model.enums.ProcessStatus;
 import com.ftn.sbnz.model.events.CpuTemperatureEvent;
 import com.ftn.sbnz.model.events.IOEvent;
+import com.ftn.sbnz.model.events.PageFaultEvent;
 import com.ftn.sbnz.model.models.CpuCore;
 import com.ftn.sbnz.model.models.Process;
 import com.ftn.sbnz.model.models.SystemState;
-import org.drools.decisiontable.ExternalSpreadsheetCompiler;
+import com.ftn.sbnz.utils.DroolsUtil;
 import org.junit.Test;
-import org.kie.api.KieBase;
-import org.kie.api.KieBaseConfiguration;
-import org.kie.api.KieServices;
-import org.kie.api.conf.EventProcessingOption;
-import org.kie.api.io.Resource;
-import org.kie.api.io.ResourceType;
 import org.kie.api.runtime.KieSession;
-import org.kie.api.runtime.KieSessionConfiguration;
-import org.kie.api.runtime.conf.ClockTypeOption;
 import org.kie.api.time.SessionPseudoClock;
-import org.kie.internal.io.ResourceFactory;
-import org.kie.internal.utils.KieHelper;
 
-import java.io.InputStream;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-public class ForwardChainTests {
-
-    private static final String sessionName = "forwardSession";
+public class RuleTests {
 
     @Test
     public void testProcessBecomesRunningWhenSufficientResources() {
-        KieSession kieSession = getSession();
+        KieSession kieSession = DroolsUtil.getSession();
 
         SystemState systemState = new SystemState(8192, 8192, true);
         Process process = new Process(1, 5, 1024, ProcessStatus.NEW, 0, Collections.nCopies(10, InstructionType.REGULAR));
@@ -62,7 +48,7 @@ public class ForwardChainTests {
 
     @Test
     public void testProcessDoesNotBecomeRunningWhenInsufficientResources() {
-        KieSession kieSession = getSession();
+        KieSession kieSession = DroolsUtil.getSession();
 
         SystemState systemState = new SystemState(1000, 1000, true);
         Process process = new Process(1, 5, 1024, ProcessStatus.NEW, 0, Collections.nCopies(10, InstructionType.REGULAR));
@@ -84,7 +70,7 @@ public class ForwardChainTests {
 
     @Test
     public void testMultipleProcessesPriorityRecognition() {
-        KieSession kieSession = getSession();
+        KieSession kieSession = DroolsUtil.getSession();
 
         SystemState systemState = new SystemState(8192, 8192, true);
         Process processHighPriority = new Process(1, 5, 1024, ProcessStatus.NEW, 0, Collections.nCopies(5, InstructionType.REGULAR));
@@ -113,7 +99,7 @@ public class ForwardChainTests {
 
     @Test
     public void testMultipleCores() {
-        KieSession kieSession = getSession();
+        KieSession kieSession = DroolsUtil.getSession();
 
         SystemState systemState = new SystemState(8192, 8192, true);
         Process processHighPriority = new Process(1, 5, 1024, ProcessStatus.NEW, 0, Collections.nCopies(5, InstructionType.REGULAR));
@@ -145,7 +131,7 @@ public class ForwardChainTests {
 
     @Test
     public void testCpuTemperatureEvents() {
-        KieSession kieSession = getSession();
+        KieSession kieSession = DroolsUtil.getSession();
         SessionPseudoClock clock = kieSession.getSessionClock();
 
         SystemState systemState = new SystemState(7168, 8192, true);
@@ -177,7 +163,7 @@ public class ForwardChainTests {
 
     @Test
     public void testCpuTemperatureEventsNotTriggered() {
-        KieSession kieSession = getSession();
+        KieSession kieSession = DroolsUtil.getSession();
         SessionPseudoClock clock = kieSession.getSessionClock();
 
         SystemState systemState = new SystemState(7168, 8192, true);
@@ -209,7 +195,7 @@ public class ForwardChainTests {
 
     @Test
     public void testCpuCooledDownTriggered() {
-        KieSession kieSession = getSession();
+        KieSession kieSession = DroolsUtil.getSession();
         SessionPseudoClock clock = kieSession.getSessionClock();
 
         SystemState systemState = new SystemState(7168, 8192, false);
@@ -241,7 +227,7 @@ public class ForwardChainTests {
 
     @Test
     public void testPriorityBoostingTemplate() {
-        KieSession kieSession = getSession();
+        KieSession kieSession = DroolsUtil.getSession();
 
         SystemState systemState = new SystemState(8192, 8192, false);
         Process process = new Process(1, 5, 1024, ProcessStatus.READY, 0, 0, Collections.nCopies(10, InstructionType.REGULAR));
@@ -262,7 +248,7 @@ public class ForwardChainTests {
 
     @Test
     public void testPreemption() {
-        KieSession kieSession = getSession();
+        KieSession kieSession = DroolsUtil.getSession();
 
         SystemState systemState = new SystemState(6144, 8192, true);
         Process processLowPriority = new Process(1, 3, 1024, ProcessStatus.RUNNING, 0, Collections.nCopies(10, InstructionType.REGULAR));
@@ -290,7 +276,7 @@ public class ForwardChainTests {
 
     @Test
     public void testIOBlocking() {
-        KieSession kieSession = getSession();
+        KieSession kieSession = DroolsUtil.getSession();
 
         SystemState systemState = new SystemState(7168, 8192, true);
         Process processLowPriority = new Process(1, 3, 1024, ProcessStatus.RUNNING, 0, List.of(InstructionType.REGULAR, InstructionType.IO, InstructionType.REGULAR));
@@ -313,7 +299,7 @@ public class ForwardChainTests {
 
     @Test
     public void testIOUnblocking() {
-        KieSession kieSession = getSession();
+        KieSession kieSession = DroolsUtil.getSession();
 
         SystemState systemState = new SystemState(7168, 8192, true);
         Process processLowPriority = new Process(1, 3, 1024, ProcessStatus.BLOCKED, 1, List.of(InstructionType.REGULAR, InstructionType.IO, InstructionType.REGULAR));
@@ -336,37 +322,101 @@ public class ForwardChainTests {
         kieSession.dispose();
     }
 
-    private KieSession getSession() {
-        KieHelper kieHelper = new KieHelper();
+    @Test
+    public void testPagingOnPageFaultEvent() {
+        KieSession kieSession = DroolsUtil.getSession();
 
-        // adding template ruleset
-        InputStream priorityBoostingTemplate = ForwardChainTests.class.getResourceAsStream("/rules/template/priority-boosting.drt");
-        InputStream data = ForwardChainTests.class.getResourceAsStream("/rules/template/priority-boosting.xls");
-        ExternalSpreadsheetCompiler converter = new ExternalSpreadsheetCompiler();
-        String priorityBoostingRules = converter.compile(data, priorityBoostingTemplate, 2, 2);
-        kieHelper.addContent(priorityBoostingRules, ResourceType.DRL);
+        SystemState systemState = new SystemState(7168, 8192, true);
+        Process process = new Process(1, 5, 1024, ProcessStatus.RUNNING, 0, Collections.nCopies(10, InstructionType.REGULAR));
+        CpuCore core = new CpuCore(1, CpuCoreStatus.BUSY, 0);
 
-        InputStream processAcceptanceTemplate = ForwardChainTests.class.getResourceAsStream("/rules/template/process-acceptance.drt");
-        data = ForwardChainTests.class.getResourceAsStream("/rules/template/process-acceptance.xls");
-        String processAcceptanceRules = converter.compile(data, processAcceptanceTemplate, 2, 2);
-        kieHelper.addContent(processAcceptanceRules, ResourceType.DRL);
+        kieSession.insert(systemState);
+        kieSession.insert(process);
+        kieSession.insert(core);
+        kieSession.insert(new PageFaultEvent(1));
+        int firedRules = kieSession.fireAllRules();
 
-        // adding regular ruleset
-        InputStream regularRules = ForwardChainTests.class.getResourceAsStream("/rules/forward/forward.drl");
-        Resource regularRulesRes = ResourceFactory.newInputStreamResource(regularRules);
-        kieHelper.addResource(regularRulesRes, ResourceType.DRL);
+        System.out.println(firedRules);
 
-        // CEP configuration
-        KieBaseConfiguration kBaseConfig = KieServices.Factory.get().newKieBaseConfiguration();
-        kBaseConfig.setOption(EventProcessingOption.STREAM);
+        assertAll(
+                () -> assertEquals(ProcessStatus.EXIT, process.getStatus()),
+                () -> assertEquals(CpuCoreStatus.IDLE, core.getStatus()),
+                () -> assertNull(core.getCurrentProcessId()),
+                () -> assertEquals(8192, systemState.getAvailableMemory()),
+                () -> assertTrue(firedRules > 12) // 12 to execute the process normally, but since paging happened it will require more
+        );
 
-        KieSessionConfiguration kSessionConfig = KieServices.Factory.get().newKieSessionConfiguration();
-        kSessionConfig.setOption(ClockTypeOption.get("pseudo"));
+        kieSession.dispose();
+    }
 
-        KieBase kBase = kieHelper.build(kBaseConfig);
-        KieSession kieSession = kBase.newKieSession(kSessionConfig, null);
-        kieSession.addEventListener(new TriggeredRulesListener());
-        kieSession.addEventListener(new WorkingMemoryListener());
-        return kieSession;
+    @Test
+    public void testCoreReturnsToBusyAfterPagingTimeout() {
+        KieSession kieSession = DroolsUtil.getSession();
+
+        SystemState systemState = new SystemState(7168, 8192, true);
+        // set lastStatusChange to current time for accurate testing
+        CpuCore core = new CpuCore(1, CpuCoreStatus.PAGING, System.currentTimeMillis());
+
+        kieSession.insert(systemState);
+        kieSession.insert(core);
+
+        try {
+            Thread.sleep(2001);
+        } catch (InterruptedException ignored) {}
+
+        kieSession.fireAllRules();
+
+        assertEquals(CpuCoreStatus.BUSY, core.getStatus());
+
+        kieSession.dispose();
+    }
+
+    @Test
+    public void testCpuThrashingAndProcessSuspension() {
+        KieSession kieSession = DroolsUtil.getSession();
+        SessionPseudoClock clock = kieSession.getSessionClock();
+
+        // set availableMemory < criticalMemoryLimit
+        SystemState systemState = new SystemState(1000, 8192, 2048, true);
+        Process processLowPriority = new Process(1, 3, 1024, ProcessStatus.RUNNING, 0, Collections.nCopies(10, InstructionType.REGULAR));
+        CpuCore core1 = new CpuCore(1, CpuCoreStatus.BUSY, 0);
+
+        kieSession.insert(systemState);
+        kieSession.insert(processLowPriority);
+        kieSession.insert(core1);
+
+        for(int i = 0; i < 5; ++i) {
+            kieSession.insert(new PageFaultEvent(1));
+            clock.advanceTime(1, TimeUnit.SECONDS);
+        }
+        int firedRules = kieSession.fireAllRules();
+
+        assertAll(
+                () -> assertEquals(ProcessStatus.SUSPENDED, processLowPriority.getStatus()),
+                () -> assertEquals(CpuCoreStatus.IDLE, core1.getStatus()),
+                () -> assertNull(core1.getCurrentProcessId()),
+                // 1 for the first paging fault, 1 for thrashing detection, 1 for suspension
+                () -> assertEquals(3, firedRules)
+        );
+
+        kieSession.dispose();
+    }
+
+    @Test
+    public void testResumeSuspendedProcessWhenMemoryIsSufficient() {
+        KieSession kieSession = DroolsUtil.getSession();
+
+        // availableMemory > process safeMemoryLimit
+        SystemState systemState = new SystemState(4096, 8192, true);
+        Process process = new Process(1, 5, 1024, ProcessStatus.SUSPENDED, 0, Collections.nCopies(10, InstructionType.REGULAR));
+        process.setSafeMemoryLimit(2048); // Set safe memory limit for the process
+
+        kieSession.insert(systemState);
+        kieSession.insert(process);
+        kieSession.fireAllRules();
+
+        assertEquals(ProcessStatus.READY, process.getStatus());
+
+        kieSession.dispose();
     }
 }
