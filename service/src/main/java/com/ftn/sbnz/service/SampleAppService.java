@@ -13,9 +13,9 @@ import org.kie.api.runtime.KieSession;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -23,11 +23,11 @@ import java.util.stream.Collectors;
 @Service
 public class SampleAppService {
 
-    private final SimpMessagingTemplate simpMessagingTemplate;
+    private final WsHandler wsHandler;
 
     @Autowired
-    public SampleAppService(SimpMessagingTemplate simpMessagingTemplate) {
-        this.simpMessagingTemplate = simpMessagingTemplate;
+    public SampleAppService(WsHandler wsHandler) {
+        this.wsHandler = wsHandler;
     }
 
     private static final Logger log = LoggerFactory.getLogger(SampleAppService.class);
@@ -77,10 +77,14 @@ public class SampleAppService {
         Thread temperatureThread = new Thread(() -> {
             while(true) {
                 CpuTemperatureEvent lastEvent = new CpuTemperatureEvent((float) (Math.random() * 130));
-                System.out.println("Sending temperature event: " + lastEvent.getTemperature());
                 kieSession.insert(lastEvent);
 
-                simpMessagingTemplate.convertAndSend("/temperature", new TemperatureMessage(lastEvent.getTemperature()));
+                try {
+                    wsHandler.sendToAll(String.valueOf(lastEvent.getTemperature()));
+                    log.info("Sending temperature event: " + lastEvent.getTemperature());
+                } catch (IOException e) {
+                    log.error("Error sending temperature event to websocket: " + e.getMessage());
+                }
 
                 try {
                     Thread.sleep(500);
