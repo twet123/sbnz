@@ -9,5 +9,4 @@ public enum EventType {
     IO_RECEIVED,
     PROCESS_FINISHED,
     END,
-    PROCESS_UNBLOCKED
 }

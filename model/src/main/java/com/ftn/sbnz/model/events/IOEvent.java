@@ -7,7 +7,6 @@ import org.kie.api.definition.type.Role;
 
 @Role(Role.Type.EVENT)
 @Data
-@Expires("5m")
 @AllArgsConstructor
 public class IOEvent {
 

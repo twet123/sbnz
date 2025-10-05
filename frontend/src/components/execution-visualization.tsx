@@ -1,20 +1,59 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Clock } from "lucide-react";
+import { Clock, Thermometer } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Client } from "@stomp/stompjs";
+import SockJS from "sockjs-client";
 
 interface ExecutionVisualizationProps {
   data: {
     rulesFired: number;
     events: Array<{
       processId: string | null;
-      eventType: "PROCESS_READY" | "PROCESS_SCHEDULED" | "PROCESS_BLOCKED" | "PROCESS_FINISHED" | "END";
+      eventType: "PROCESS_READY" | "PROCESS_SCHEDULED" | "PROCESS_BLOCKED" | "PROCESS_FINISHED" | "END" | "PAGING" | "PREEMPTED" | "IO_RECEIVED";
     }>;
   } | null;
   isLoading: boolean;
 }
 
 export function ExecutionVisualization({ data, isLoading }: ExecutionVisualizationProps) {
+  const [cpuTemperature, setCpuTemperature] = useState<number | null>(null);
+  const [wsConnected, setWsConnected] = useState(false);
+
+  useEffect(() => {
+    const socketUrl = "http://localhost:8080/ws";
+    const client = new Client({
+      webSocketFactory: () => new SockJS(socketUrl),
+      reconnectDelay: 5000,
+      onConnect: () => {
+        setWsConnected(true);
+        console.log("connected to ws");
+        client.subscribe("/temperature", (message) => {
+          console.log(message);
+          try {
+            const data = JSON.parse(message.body);
+            if (typeof data.temperature === "number") {
+              setCpuTemperature(data.temperature);
+            }
+          } catch (error) {
+            console.error("Error parsing STOMP message:", error);
+          }
+        });
+      },
+      onStompError: (frame) => {
+        setWsConnected(false);
+        console.error("Broker error:", frame.headers["message"]);
+      },
+      onWebSocketClose: () => setWsConnected(false),
+      onWebSocketError: () => setWsConnected(false),
+    });
+
+    return () => {
+      client.deactivate();
+    };
+  }, []);
+
   if (isLoading) {
     return (
       <Card className="border-border bg-card">
@@ -86,8 +125,34 @@ export function ExecutionVisualization({ data, isLoading }: ExecutionVisualizati
       .join(" ");
   };
 
+  const getTemperatureColor = () => {
+    if (cpuTemperature === null) return "text-foreground";
+    if (cpuTemperature >= 80) return "text-red-400";
+    if (cpuTemperature >= 60) return "text-yellow-400";
+    return "text-green-400";
+  };
+
   return (
     <div className="space-y-6">
+      <Card className="border-border bg-card">
+        <CardHeader>
+          <CardTitle className="text-foreground">System Monitor</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-3 rounded-lg border border-border bg-secondary/30 p-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-chart-2/10 border border-chart-2/20">
+              <Thermometer className="h-5 w-5 text-chart-2" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">CPU Temperature</p>
+              <p className={`text-lg font-semibold ${getTemperatureColor()}`}>
+                {cpuTemperature !== null ? `${cpuTemperature}°C` : !wsConnected ? "Not connected" : "Waiting..."}
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       <Card className="border-border bg-card">
         <CardHeader>
           <CardTitle className="text-foreground">Execution Summary</CardTitle>
@@ -100,16 +165,18 @@ export function ExecutionVisualization({ data, isLoading }: ExecutionVisualizati
               </div>
               <div>
                 <p className="text-xs text-muted-foreground text-left">Total Time</p>
-                <p className="text-lg font-semibold text-foreground text-left">{totalTime} rules</p>
+                <p className="text-lg font-semibold text-foreground text-left">{totalTime} cycles</p>
               </div>
             </div>
             <div className="flex items-center gap-3 rounded-lg border border-border bg-secondary/30 p-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-chart-2/10 border border-chart-2/20">
-                <Clock className="h-5 w-5 text-chart-2" />
+                <Thermometer className="h-5 w-5 text-chart-2" />
               </div>
               <div>
-                <p className="text-xs text-muted-foreground text-left">Total Events</p>
-                <p className="text-lg font-semibold text-foreground text-left">{events.length}</p>
+                <p className="text-xs text-muted-foreground text-left">CPU Temperature</p>
+                <p className={`text-lg font-semibold text-left ${getTemperatureColor()}`}>
+                  {cpuTemperature !== null ? `${cpuTemperature}°C` : !wsConnected ? "Not connected" : "Waiting..."}
+                </p>
               </div>
             </div>
           </div>

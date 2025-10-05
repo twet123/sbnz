@@ -4,10 +4,7 @@ import com.ftn.sbnz.listener.TriggeredRulesListener;
 import com.ftn.sbnz.model.events.CpuTemperatureEvent;
 import com.ftn.sbnz.model.events.IOEvent;
 import com.ftn.sbnz.model.events.PageFaultEvent;
-import com.ftn.sbnz.service.dtos.EventDto;
-import com.ftn.sbnz.service.dtos.EventListDto;
-import com.ftn.sbnz.service.dtos.EventType;
-import com.ftn.sbnz.service.dtos.SystemStateDto;
+import com.ftn.sbnz.service.dtos.*;
 import com.ftn.sbnz.utils.DroolsUtil;
 import org.apache.commons.math3.util.Pair;
 import org.kie.api.event.rule.AgendaEventListener;
@@ -15,6 +12,8 @@ import org.kie.api.event.rule.RuleRuntimeEventListener;
 import org.kie.api.runtime.KieSession;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -23,6 +22,13 @@ import java.util.stream.Collectors;
 
 @Service
 public class SampleAppService {
+
+    private final SimpMessagingTemplate simpMessagingTemplate;
+
+    @Autowired
+    public SampleAppService(SimpMessagingTemplate simpMessagingTemplate) {
+        this.simpMessagingTemplate = simpMessagingTemplate;
+    }
 
     private static final Logger log = LoggerFactory.getLogger(SampleAppService.class);
 
@@ -41,33 +47,46 @@ public class SampleAppService {
         List<Thread> ioThreads = systemState.getProcesses().stream()
                 .filter(processDto -> !processDto.getIoInstructions().isEmpty())
                 .map(processDtoWithIo -> new Thread(() -> {
-                    kieSession.insert(new IOEvent(Integer.parseInt(processDtoWithIo.getId())));
-                    try {
-                        Thread.sleep(1500);
-                    } catch (InterruptedException ignored) {
+                    while (true) {
+                        kieSession.insert(new IOEvent(Integer.parseInt(processDtoWithIo.getId())));
+                        try {
+                            Thread.sleep(1500);
+                        } catch (InterruptedException ignored) {
+                            break;
+                        }
                     }
                 }))
                 .collect(Collectors.toList());
 
         List<Thread> pageFaultThreads = systemState.getProcesses().stream()
                 .map(processDto -> new Thread(() -> {
-                    if (Math.random() < 0.2) {
-                        kieSession.insert(new PageFaultEvent(Integer.parseInt(processDto.getId())));
-                    }
+                    while(true) {
+                        if (Math.random() < 0.2) {
+                            kieSession.insert(new PageFaultEvent(Integer.parseInt(processDto.getId())));
+                        }
 
-                    try {
-                        Thread.sleep(1000);
-                    } catch (InterruptedException ignored) {
+                        try {
+                            Thread.sleep(1000);
+                        } catch (InterruptedException ignored) {
+                            break;
+                        }
                     }
                 }))
                 .collect(Collectors.toList());
 
         Thread temperatureThread = new Thread(() -> {
-            kieSession.insert(new CpuTemperatureEvent((float) (Math.random() * 130)));
+            while(true) {
+                CpuTemperatureEvent lastEvent = new CpuTemperatureEvent((float) (Math.random() * 130));
+                System.out.println("Sending temperature event: " + lastEvent.getTemperature());
+                kieSession.insert(lastEvent);
 
-            try {
-                Thread.sleep(2000);
-            } catch (InterruptedException ignored) {
+                simpMessagingTemplate.convertAndSend("/temperature", new TemperatureMessage(lastEvent.getTemperature()));
+
+                try {
+                    Thread.sleep(500);
+                } catch (InterruptedException ignored) {
+                    break;
+                }
             }
         });
 
@@ -77,6 +96,10 @@ public class SampleAppService {
 
         kieSession.fireUntilHalt();
         kieSession.dispose();
+
+        temperatureThread.interrupt();
+        ioThreads.forEach(Thread::interrupt);
+        pageFaultThreads.forEach(Thread::interrupt);
 
         return processTriggeredRules(rulesListener.getFiredRules());
     }
@@ -101,7 +124,9 @@ public class SampleAppService {
             } else if (triggeredRule.getFirst().contains("Preempt when there is a process")) {
                 eventDto.setEventType(EventType.PREEMPTED);
             } else if (triggeredRule.getFirst().contains("Handle I/O events")) {
-                eventDto.setEventType(EventType.PROCESS_UNBLOCKED);
+                eventDto.setEventType(EventType.IO_RECEIVED);
+            } else if (triggeredRule.getFirst().contains("Handle page fault")) {
+                eventDto.setEventType(EventType.PAGING);
             } else {
                 continue;
             }

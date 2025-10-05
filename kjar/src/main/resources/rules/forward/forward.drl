@@ -149,6 +149,7 @@ rule "Handle I/O events"
         $p: Process(id == $io.processId, status == ProcessStatus.BLOCKED)
     then
         modify($p) { setStatus(ProcessStatus.READY), setCurrentInstruction($p.getCurrentInstruction() + 1) }
+        delete($io);
 end
 
 rule "Handle page fault events"
