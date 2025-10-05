@@ -1,38 +1,43 @@
 package com.ftn.sbnz.listener;
 
+import lombok.Getter;
+import org.apache.commons.math3.util.Pair;
 import org.kie.api.event.rule.*;
 
-public class TriggeredRulesListener implements AgendaEventListener {
+import java.util.ArrayList;
+import java.util.List;
+
+public class TriggeredRulesListener extends DefaultAgendaEventListener implements RuleRuntimeEventListener {
+
+    @Getter
+    private List<Pair<String, List<String>>> firedRules = new ArrayList<>();
+    private Pair<String, List<String>> lastRuleFired;
 
     @Override
-    public void afterMatchFired(AfterMatchFiredEvent event) {
-        System.out.println("Rule triggered: " + event.getMatch().getRule().getName());
+    public void beforeMatchFired(BeforeMatchFiredEvent event) {
+        String ruleName = event.getMatch().getRule().getName();
+        System.out.println("Rule fired: " + ruleName);
+        lastRuleFired = new Pair<>(ruleName, new ArrayList<>());
     }
 
     @Override
-    public void beforeMatchFired(BeforeMatchFiredEvent event) { /* No-op */ }
+    public void afterMatchFired(AfterMatchFiredEvent event) {
+        firedRules.add(lastRuleFired);
+    }
 
     @Override
-    public void matchCancelled(MatchCancelledEvent event) { /* No-op */ }
+    public void objectInserted(ObjectInsertedEvent event) {
+    }
 
     @Override
-    public void matchCreated(MatchCreatedEvent event) { /* No-op */ }
+    public void objectUpdated(ObjectUpdatedEvent event) {
+        Object eventObject = event.getObject();
+        System.out.println("Fact updated: " + eventObject);
+        lastRuleFired.getValue().add(eventObject.toString());
+    }
 
     @Override
-    public void agendaGroupPopped(AgendaGroupPoppedEvent event) { /* No-op */ }
+    public void objectDeleted(ObjectDeletedEvent objectDeletedEvent) {
 
-    @Override
-    public void agendaGroupPushed(AgendaGroupPushedEvent event) { /* No-op */ }
-
-    @Override
-    public void beforeRuleFlowGroupActivated(RuleFlowGroupActivatedEvent event) { /* No-op */ }
-
-    @Override
-    public void afterRuleFlowGroupActivated(RuleFlowGroupActivatedEvent event) { /* No-op */ }
-
-    @Override
-    public void beforeRuleFlowGroupDeactivated(RuleFlowGroupDeactivatedEvent event) { /* No-op */ }
-
-    @Override
-    public void afterRuleFlowGroupDeactivated(RuleFlowGroupDeactivatedEvent event) { /* No-op */ }
+    }
 }

@@ -1,5 +1,6 @@
 package com.ftn.sbnz.service;
 
+import com.ftn.sbnz.service.dtos.EventListDto;
 import com.ftn.sbnz.service.dtos.SystemStateDto;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,8 +21,8 @@ public class SampleAppController {
     }
 
     @PostMapping("/schedule")
-    public SystemStateDto schedule(@RequestBody SystemStateDto systemState) {
+    public EventListDto schedule(@RequestBody SystemStateDto systemState) {
         log.info("Received system state: {}", systemState);
-        return systemState;
+        return sampleService.runSystem(systemState);
     }
 }

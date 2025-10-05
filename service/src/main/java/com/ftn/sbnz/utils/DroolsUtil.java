@@ -1,7 +1,5 @@
 package com.ftn.sbnz.utils;
 
-import com.ftn.sbnz.listener.TriggeredRulesListener;
-import com.ftn.sbnz.listener.WorkingMemoryListener;
 import org.drools.decisiontable.ExternalSpreadsheetCompiler;
 import org.kie.api.KieBase;
 import org.kie.api.KieBaseConfiguration;
@@ -47,9 +45,6 @@ public class DroolsUtil {
         kSessionConfig.setOption(ClockTypeOption.get("pseudo"));
 
         KieBase kBase = kieHelper.build(kBaseConfig);
-        KieSession kieSession = kBase.newKieSession(kSessionConfig, null);
-        kieSession.addEventListener(new TriggeredRulesListener());
-        kieSession.addEventListener(new WorkingMemoryListener());
-        return kieSession;
+        return kBase.newKieSession(kSessionConfig, null);
     }
 }

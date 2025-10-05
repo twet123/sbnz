@@ -1,28 +1,128 @@
 package com.ftn.sbnz.service;
 
+import com.ftn.sbnz.listener.TriggeredRulesListener;
+import com.ftn.sbnz.model.events.CpuTemperatureEvent;
+import com.ftn.sbnz.model.events.IOEvent;
+import com.ftn.sbnz.model.events.PageFaultEvent;
+import com.ftn.sbnz.service.dtos.EventDto;
 import com.ftn.sbnz.service.dtos.EventListDto;
+import com.ftn.sbnz.service.dtos.EventType;
 import com.ftn.sbnz.service.dtos.SystemStateDto;
 import com.ftn.sbnz.utils.DroolsUtil;
+import org.apache.commons.math3.util.Pair;
+import org.kie.api.event.rule.AgendaEventListener;
+import org.kie.api.event.rule.RuleRuntimeEventListener;
 import org.kie.api.runtime.KieSession;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 public class SampleAppService {
 
     private static final Logger log = LoggerFactory.getLogger(SampleAppService.class);
 
-
     public EventListDto runSystem(SystemStateDto systemState) {
+        TriggeredRulesListener rulesListener = new TriggeredRulesListener();
+
         KieSession kieSession = DroolsUtil.getSession();
 
-        kieSession.insert(systemState.getSystem());
+        kieSession.addEventListener((AgendaEventListener) rulesListener);
+        kieSession.addEventListener((RuleRuntimeEventListener) rulesListener);
+
+        kieSession.insert(systemState.getSystemStateModel());
+        systemState.getCpuCoreModels().forEach(kieSession::insert);
         systemState.getProcessModels().forEach(kieSession::insert);
-        systemState.getProcesses().forEach(kieSession::insert);
+
+        List<Thread> ioThreads = systemState.getProcesses().stream()
+                .filter(processDto -> !processDto.getIoInstructions().isEmpty())
+                .map(processDtoWithIo -> new Thread(() -> {
+                    kieSession.insert(new IOEvent(Integer.parseInt(processDtoWithIo.getId())));
+                    try {
+                        Thread.sleep(1500);
+                    } catch (InterruptedException ignored) {
+                    }
+                }))
+                .collect(Collectors.toList());
+
+        List<Thread> pageFaultThreads = systemState.getProcesses().stream()
+                .map(processDto -> new Thread(() -> {
+                    if (Math.random() < 0.2) {
+                        kieSession.insert(new PageFaultEvent(Integer.parseInt(processDto.getId())));
+                    }
+
+                    try {
+                        Thread.sleep(1000);
+                    } catch (InterruptedException ignored) {
+                    }
+                }))
+                .collect(Collectors.toList());
+
+        Thread temperatureThread = new Thread(() -> {
+            kieSession.insert(new CpuTemperatureEvent((float) (Math.random() * 130)));
+
+            try {
+                Thread.sleep(2000);
+            } catch (InterruptedException ignored) {
+            }
+        });
+
+        temperatureThread.start();
+        ioThreads.forEach(Thread::start);
+        pageFaultThreads.forEach(Thread::start);
 
         kieSession.fireUntilHalt();
+        kieSession.dispose();
 
-        return new EventListDto();
+        return processTriggeredRules(rulesListener.getFiredRules());
+    }
+
+    private EventListDto processTriggeredRules(List<Pair<String, List<String>>> triggeredRules) {
+        EventListDto eventListDto = new EventListDto();
+        List<EventDto> eventDtos = new ArrayList<>();
+
+        for (Pair<String, List<String>> triggeredRule : triggeredRules) {
+            EventDto eventDto = new EventDto();
+
+            if (triggeredRule.getFirst().contains("Make process ready")) {
+                eventDto.setEventType(EventType.PROCESS_READY);
+            } else if (triggeredRule.getFirst().contains("Schedule process")) {
+                eventDto.setEventType(EventType.PROCESS_SCHEDULED);
+            } else if (triggeredRule.getFirst().contains("Finish executing the process")) {
+                eventDto.setEventType(EventType.PROCESS_FINISHED);
+            } else if (triggeredRule.getFirst().contains("Stop system")) {
+                eventDto.setEventType(EventType.END);
+            } else if (triggeredRule.getFirst().contains("Block process on I/O")) {
+                eventDto.setEventType(EventType.PROCESS_BLOCKED);
+            } else if (triggeredRule.getFirst().contains("Preempt when there is a process")) {
+                eventDto.setEventType(EventType.PREEMPTED);
+            } else if (triggeredRule.getFirst().contains("Handle I/O events")) {
+                eventDto.setEventType(EventType.PROCESS_UNBLOCKED);
+            } else {
+                continue;
+            }
+
+            eventDto.setProcessId(triggeredRule.getSecond().stream().filter(fact -> fact.startsWith("Process")).map(pFact -> {
+                        String startMarker = "Process(id=";
+
+                        int startIndex = pFact.indexOf("Process(id=");
+                        startIndex += startMarker.length();
+
+                        int endIndex = pFact.indexOf(", ", startIndex);
+                        return pFact.substring(startIndex, endIndex);
+                    }
+            ).findFirst().orElse(null));
+
+            eventDtos.add(eventDto);
+        }
+
+        eventListDto.setEvents(eventDtos);
+        eventListDto.setRulesFired(triggeredRules.size());
+
+        return eventListDto;
     }
 }

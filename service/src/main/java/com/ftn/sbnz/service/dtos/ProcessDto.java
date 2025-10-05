@@ -1,6 +1,7 @@
 package com.ftn.sbnz.service.dtos;
 
 import com.ftn.sbnz.model.enums.InstructionType;
+import lombok.AllArgsConstructor;
 import lombok.Data;
 
 import java.util.ArrayList;
