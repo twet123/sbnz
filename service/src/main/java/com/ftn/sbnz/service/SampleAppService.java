@@ -18,12 +18,15 @@ import org.springframework.stereotype.Service;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 import java.util.stream.Collectors;
 
 @Service
 public class SampleAppService {
 
     private final WsHandler wsHandler;
+    private float startingTemp = 50;
+    private Random random = new Random();
 
     @Autowired
     public SampleAppService(WsHandler wsHandler) {
@@ -76,7 +79,11 @@ public class SampleAppService {
 
         Thread temperatureThread = new Thread(() -> {
             while(true) {
-                CpuTemperatureEvent lastEvent = new CpuTemperatureEvent((float) (Math.random() * 130));
+                float change = (random.nextFloat() - 0.5f) * 4.0f;
+                startingTemp += change;
+                startingTemp = Math.max(20.0f, Math.min(130.0f, startingTemp));
+
+                CpuTemperatureEvent lastEvent = new CpuTemperatureEvent(startingTemp);
                 kieSession.insert(lastEvent);
 
                 try {

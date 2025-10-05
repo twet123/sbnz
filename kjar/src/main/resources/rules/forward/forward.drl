@@ -125,18 +125,19 @@ end
 rule "Offload cores when overheating"
 salience 2
     when
-        $ohe: CpuOverheatEvent()
+        CpuOverheatEvent()
+        $ss: SystemState(cpuEnabled == false)
         $core: CpuCore(status != CpuCoreStatus.IDLE)
         $p: Process(id == $core.currentProcessId, status == ProcessStatus.RUNNING)
     then
         modify($core) { setCurrentProcessId(null), setStatus(CpuCoreStatus.IDLE) }
         modify($p) { setStatus(ProcessStatus.READY) }
-        delete($ohe);
 end
 
 rule "Enable CPU after cooling down"
 no-loop
     when
+        not CpuOverheatEvent()
         $coolTempCount: Number(intValue >= 5) from accumulate(
             $tempEvent: CpuTemperatureEvent(temperature < 50) over window:time(10s),
             count(1)
