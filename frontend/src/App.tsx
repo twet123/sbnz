@@ -2,11 +2,14 @@ import { Cpu } from "lucide-react";
 import "./App.css";
 import { ProcessForm } from "@/components/process-form";
 import { useState } from "react";
+import { ExecutionVisualization } from "./components/execution-visualization";
 
 function App() {
   const [isLoading, setIsLoading] = useState(false);
+  const [executionSteps, setExecutionSteps] = useState<null>(null);
 
   const handleSubmit = async (data: any) => {
+    console.log(data);
     setIsLoading(true);
     try {
       // TODO: Replace with actual endpoint
@@ -17,7 +20,7 @@ function App() {
       });
 
       const result = await response.json();
-      // setExecutionSteps(result)
+      setExecutionSteps(result);
     } catch (error) {
       console.error("Error submitting data:", error);
     } finally {
@@ -40,7 +43,7 @@ function App() {
 
         <div className="grid gap-8 lg:grid-cols-2">
           <ProcessForm onSubmit={handleSubmit} isLoading={isLoading} />
-          {/* <ExecutionVisualization data={executionSteps} isLoading={isLoading} /> */}
+          <ExecutionVisualization data={executionSteps} isLoading={isLoading} />
         </div>
       </div>
     </main>

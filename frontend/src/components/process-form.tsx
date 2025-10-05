@@ -42,7 +42,7 @@ export function ProcessForm({ onSubmit, isLoading }: ProcessFormProps) {
       .filter((n) => !isNaN(n) && n > 0 && n <= currentProcess.instructions);
 
     const newProcess: Process = {
-      id: Date.now().toString(),
+      id: (processes.length + 1).toString(),
       priority: currentProcess.priority,
       memoryRequirement: currentProcess.memoryRequirement,
       safeMemoryLimit: currentProcess.safeMemoryLimit,
