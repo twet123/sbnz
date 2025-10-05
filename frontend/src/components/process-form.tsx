@@ -93,7 +93,7 @@ export function ProcessForm({ onSubmit, isLoading }: ProcessFormProps) {
                 id="cpuCores"
                 type="number"
                 min={1}
-                max={32}
+                max={10}
                 value={cpuCores}
                 onChange={(e) => setCpuCores(Number.parseInt(e.target.value) || 1)}
                 className="bg-input border:border text-foreground"

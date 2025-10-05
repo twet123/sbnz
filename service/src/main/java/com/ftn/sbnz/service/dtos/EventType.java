@@ -9,4 +9,9 @@ public enum EventType {
     IO_RECEIVED,
     PROCESS_FINISHED,
     END,
+    CPU_DISABLED,
+    CPU_ENABLED,
+    THRASHING,
+    PROCESS_SUSPENDED,
+    PROCESS_RESUMED
 }

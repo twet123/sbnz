@@ -9,7 +9,20 @@ interface ExecutionVisualizationProps {
     rulesFired: number;
     events: Array<{
       processId: string | null;
-      eventType: "PROCESS_READY" | "PROCESS_SCHEDULED" | "PROCESS_BLOCKED" | "PROCESS_FINISHED" | "END" | "PAGING" | "PREEMPTED" | "IO_RECEIVED";
+      eventType:
+        | "PROCESS_READY"
+        | "PROCESS_SCHEDULED"
+        | "PROCESS_BLOCKED"
+        | "PROCESS_FINISHED"
+        | "END"
+        | "PAGING"
+        | "PREEMPTED"
+        | "IO_RECEIVED"
+        | "CPU_DISABLED"
+        | "CPU_ENABLED"
+        | "THRASHING"
+        | "PROCESS_SUSPENDED"
+        | "PROCESS_RESUMED";
     }>;
   } | null;
   isLoading: boolean;

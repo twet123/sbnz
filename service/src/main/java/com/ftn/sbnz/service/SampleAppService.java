@@ -138,6 +138,16 @@ public class SampleAppService {
                 eventDto.setEventType(EventType.IO_RECEIVED);
             } else if (triggeredRule.getFirst().contains("Handle page fault")) {
                 eventDto.setEventType(EventType.PAGING);
+            } else if (triggeredRule.getFirst().contains("Detect CPU overheating")) {
+                eventDto.setEventType(EventType.CPU_DISABLED);
+            } else if (triggeredRule.getFirst().contains("Enable CPU")) {
+                eventDto.setEventType(EventType.CPU_ENABLED);
+            } else if (triggeredRule.getFirst().contains("CPU thrashing")) {
+                eventDto.setEventType(EventType.THRASHING);
+            } else if (triggeredRule.getFirst().contains("Suspend lowest priority process")) {
+                eventDto.setEventType(EventType.PROCESS_SUSPENDED);
+            } else if (triggeredRule.getFirst().contains("Handle suspended process")) {
+                eventDto.setEventType(EventType.PROCESS_RESUMED);
             } else {
                 continue;
             }

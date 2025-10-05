@@ -181,7 +181,7 @@ end
 rule "Suspend lowest priority process"
 salience 2
     when
-        SuspendLowestPriorityProcessEvent()
+        $susp: SuspendLowestPriorityProcessEvent()
         $minPriority: Number() from accumulate(
             Process(status == ProcessStatus.RUNNING, $priority: priority),
             min($priority)
@@ -191,6 +191,7 @@ salience 2
     then
         modify($p) { setStatus(ProcessStatus.SUSPENDED) }
         modify($core) { setCurrentProcessId(null), setStatus(CpuCoreStatus.IDLE) }
+        delete($susp);
 end
 
 rule "Stop system"
